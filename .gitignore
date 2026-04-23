@@ -1,4 +1,4 @@
 *.mat
 *.h5
-figures/*
+*figures/*
 *.pth
