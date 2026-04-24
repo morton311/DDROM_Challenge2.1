@@ -1,5 +1,16 @@
-import torch
-import torch.nn as nn
+import importlib.util
+import warnings
+
+if importlib.util.find_spec("torch") is None or importlib.util.find_spec("torch.nn") is None:
+    warnings.warn(
+        "PyTorch is not available in this environment. "
+        "Install it with: pip install torch",
+        ImportWarning,
+        stacklevel=2,
+    )
+else:
+    import torch
+    import torch.nn as nn
 import math
 from functools import partial
 from datetime import datetime
@@ -79,6 +90,7 @@ def make_dataloader(X, Y, batch_size=32, shuffle=True):
     """
     import torch
     from torch.utils.data import DataLoader, TensorDataset
+
 
     # Create a TensorDataset
     dataset = TensorDataset(X, Y)
