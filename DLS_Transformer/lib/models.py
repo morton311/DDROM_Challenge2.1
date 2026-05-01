@@ -100,7 +100,7 @@ def make_dataloader(X, Y, batch_size=32, shuffle=True):
 
     return dataloader
     
-def train_model(model, train_loader, test_loader, criterion, optimizer, num_epochs, patience, device, model_dir, data_name):
+def train_model(model, train_loader, test_loader, criterion, optimizer, num_epochs, patience, device, model_dir, data_name, checkpointing=True):
     """
     Train the model with the given parameters.
 
@@ -184,8 +184,9 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, num_epoc
                 best_model = copy.deepcopy(model.state_dict())
 
                 # Save the best model checkpoint
-                checkpoint_path = os.path.join(model_dir, f'{data_name}_best_model.pth')
-                torch.save(best_model, checkpoint_path)
+                if checkpointing:
+                    checkpoint_path = os.path.join(model_dir, f'{data_name}_best_model.pth')
+                    torch.save(best_model, checkpoint_path)
                 best_epoch = epoch + 1
                 print(f'Best model saved at epoch {best_epoch} with test loss: {best_test_loss:.4f}')
                 early_stop_counter = 0
@@ -212,16 +213,17 @@ def forecastClosedLoop(net_in, A_norm, nt_fore, device):
     """
     Helper: advance LSTM or transformer in closed loop for nt_fore steps
     """
-    X0 = A_norm[:-1]  # [T x n_modes]
-
-    # convert to torch tensor and add batch dimension, then move to device
-    X0 = torch.from_numpy(X0).float().unsqueeze(0)  # [1 x T x n_modes]
-    X0 = X0.to(device)
-    net_in.eval()  # set model to evaluation mode
-    
-    # if net_in contains an LSTM, we need to get the initial hidden states
-    # check if model has lstm layer
     if hasattr(net_in, 'lstm'):
+        X0 = A_norm[:-1]  # [T x n_modes]
+
+        # convert to torch tensor and add batch dimension, then move to device
+        X0 = torch.from_numpy(X0).float().unsqueeze(0)  # [1 x T x n_modes]
+        X0 = X0.to(device)
+        net_in.eval()  # set model to evaluation mode
+        
+        # if net_in contains an LSTM, we need to get the initial hidden states
+        # check if model has lstm layer
+    
         _, states = net_in(X0, states=None, return_state=True)
         y_prev, states = net_in(X0[0,-1].unsqueeze(0), states=None, return_state=True)
 
@@ -236,19 +238,25 @@ def forecastClosedLoop(net_in, A_norm, nt_fore, device):
             A_fore[0, t, :] = y_prev.cpu()  # store the forecasted point
 
     elif hasattr(net_in, 'encoder_layers'):
-        y_prev = net_in(X0)[:, -1, :].unsqueeze(1)  # get the last output as the initial input for forecasting
+        X0 = A_norm[:-1]  # [T x n_modes]
+
+        # convert to torch tensor and add batch dimension, then move to device
+        X0 = torch.from_numpy(X0).float()  # [1 x T x n_modes]
+        X0 = X0.to(device)
+        net_in.eval()  # set model to evaluation mode
+        y_prev = X0.unsqueeze(1)
+        # print(f"Initial input shape: {y_prev.shape}")  # Debugging print statement
+        y_prev = net_in(y_prev)
 
         n_modes = A_norm.shape[-1]
         A_fore = torch.zeros((1, nt_fore, n_modes)).to(device)
-
-        A_fore[0, 0, :] = y_prev.cpu()
+        # print(f"y_prev shape after first forward pass: {y_prev.shape}")  # Debugging print statement
+        A_fore[0, 0, :] = y_prev[-1,-1, :].cpu().squeeze()  # store the first forecasted point
 
         for t in range(1, nt_fore):
             # print(f"y_prev shape: {y_prev.shape}")  # Debugging print statement 
-            y_prev = net_in(y_prev)
-            y_prev = y_prev[:,-1,:].unsqueeze(1)  # reshape for next input
-            # print(f"y_prev shape: {y_prev.shape}")  # Debugging print statement 
-            A_fore[0, t, :] = y_prev.cpu()  # store the forecasted point
+            y_prev = net_in(y_prev[:,-1,:])
+            A_fore[0, t, :] = y_prev[:,-1,:].cpu()  # store the forecasted point
 
     else:
         raise ValueError("Model must have either 'lstm' or 'encoder_layers' attribute")

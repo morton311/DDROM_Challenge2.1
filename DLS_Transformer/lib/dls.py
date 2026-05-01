@@ -408,7 +408,7 @@ def vis_modes(config, save_dir):
     paper_width = 470 # pt
     width = paper_width / 72.27 # inches
     height = width / 1.618 # inches
-    plt.rcParams['text.usetex'] = True
+    # plt.rcParams['text.usetex'] = True
     # set default font size
     plt.rcParams['font.size'] = 8 # Change default font size to 12
     plt.rcParams['axes.titlesize'] = 10 # Change axes title font size
